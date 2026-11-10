@@ -4,7 +4,6 @@ const ICON_B = '<svg class="icon-b" viewBox="0 0 24 24"><path d="m12 3-1.912 5.8
 let peer = null;
 let conn = null;
 let isHost = false;
-let connDataBound = false;  // 防止 bindConnData 重复绑定 data 监听器
 let connGuardBound = false; // 防止 armConnGuard 重复绑定 close/error 监听器
 let connTimeout = null;     // 加入房间 15 秒握手超时定时器
 let gameMode = 'hard';
@@ -141,7 +140,6 @@ function createRoom() {
     peer.on('connection', function(connection) {
         conn = connection;
         isHost = true;
-        connDataBound = false;
         connGuardBound = false;
         console.log('[telepathy] host data connection established');
         armConnGuard();
@@ -165,7 +163,6 @@ function createRoom() {
 function cleanupJoin() {
     try { if (conn) { conn.close(); conn = null; } } catch (e) {}
     try { if (peer) { peer.destroy(); peer = null; } } catch (e) {}
-    connDataBound = false;
     connGuardBound = false;
     gameState = 'LOBBY';
     updateTopStatus('请建立连接');
@@ -180,7 +177,6 @@ function joinRoom() {
     peer = new Peer(peerOptions);
     peer.on('open', function() {
         conn = peer.connect('irene-pbox-' + code, { reliable: true });
-        connDataBound = false;
         connGuardBound = false;
         isHost = false;
 
@@ -224,8 +220,6 @@ function joinRoom() {
 }
 function bindConnData() {
     if (!conn) return;
-    if (connDataBound) return;
-    connDataBound = true;
     conn.on('data', function(payload) {
         if (!payload || !payload.type) return;
         if (payload.type === 'MODE') {
@@ -384,7 +378,6 @@ function exitGame(force) {
     }
     if (conn) { try { conn.close(); } catch (e) {} conn = null; }
     if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
-    connDataBound = false;
     connGuardBound = false;
     gameState = 'LOBBY';
     isPVE = false;
@@ -453,6 +446,10 @@ function renderInput() {
         }
     });
     refreshKeyStates();
+    // 每次清空输入或刷新 UI 时，强制清除所有按键的草稿变灰状态
+    if (currentInput.length === 0) {
+        document.querySelectorAll('.key').forEach(k => k.classList.remove('draft-dimmed'));
+    }
     refreshConfirm();
 }
 function refreshKeyStates() {
@@ -505,7 +502,7 @@ function renderOppGuesses() {
     });
 }
 function submitGuess() {
-    if (currentInput.length !== 4 || gameState === 'LOBBY' || gameState === 'GAMEOVER') return;
+    if (currentInput.length !== 4 || gameState === 'LOBBY' || gameState === 'GAMEOVER' || gameState === 'WAIT_OPP_FINISH') return;
     if (typeof playSound === 'function') playSound('bubble');
     // SETTING_SECRET 状态下允许提交底牌（房主设密）
     if (gameState === 'SETTING_SECRET') {
@@ -590,6 +587,8 @@ function submitGuess() {
         if (oppWon) {
             // 对方已赢，无需移交回合，自己可以无限继续猜
             updateTopStatus('你的回合 (你的心思已被宝宝猜透)');
+            renderInput();
+            // 必须先刷新 UI（清空输入框），然后再 return！
             return; 
         }
         
@@ -635,7 +634,7 @@ keys.forEach(function(key) {
             if (key.classList.contains('submit-key')) { submitGuess(); return; }
             if (key.classList.contains('del-key')) { withdraw(); return; }
             if (key.classList.contains('draft-dimmed')) return;
-            if (gameState !== 'PVE_TURN' && gameState !== 'MY_TURN' && gameState !== 'SETTING_SECRET' && gameState !== 'SET_SECRET') return;
+            if (gameState === 'LOBBY' || gameState === 'GAMEOVER' || gameState === 'WAIT_OPP_FINISH') return;
             const num = key.getAttribute('data-num') || key.innerText.trim();
             handleDigit(num);
         };
