@@ -1,35 +1,31 @@
-const ICON_A = '<svg class="icon-a" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
-const ICON_B = '<svg class="icon-b" viewBox="0 0 24 24"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>';
+const ICON_A = '<svg class="icon-a" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>';
+const ICON_B = '<svg class="icon-b" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>';
+const SETUP_PROMPT = '请在下方输入你的 4 位灵犀密码，然后点击确认';
+const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const MAX_PVE_ATTEMPTS = 20;
+const CONNECTION_TIMEOUT = 15000;
 
+let sessionId = 0;
+const sessionTimers = new Set();
+const sessionListeners = [];
+let connectionTimer = null;
 let peer = null;
 let conn = null;
 let isHost = false;
-let connGuardBound = false; // 防止 armConnGuard 重复绑定 close/error 监听器
-let connTimeout = null;     // 加入房间 15 秒握手超时定时器
 let gameMode = 'hard';
-let currentMode = 'hardcore';
-let gameState = 'LOBBY'; // LOBBY, SET_SECRET, SETTING_SECRET, WAIT_OPPONENT, COIN_TOSS, MY_TURN, OPP_TURN, PVE_TURN, PLAYING, GAMEOVER
+let gameState = 'LOBBY';
 let mySecret = [];
 let oppSecret = [];
-let secretCode = [];
-let myGuesses = [];
-let oppGuesses = [];
-let currentGuess = [];
-let currentInput = currentGuess;
-let attemptsLeft = 20;
-let isPVE = false;
-let pendingReset = false;
-let mySecretCode = [];
-let myReady = false;
-let oppReady = false;
-const MAX_PVE_ATTEMPTS = 20;
-let iWon = false;   // 玩家自己是否破译成功
-let oppWon = false; // 对方是否破译成功
+const currentGuess = [];
+let attemptsLeft = MAX_PVE_ATTEMPTS;
+let iWon = false;
+let oppWon = false;
+let keyPress = null;
 
 const peerOptions = {
     debug: 2,
     config: {
-        'iceServers': [
+        iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun.qq.com:3478' },
@@ -39,724 +35,591 @@ const peerOptions = {
 };
 
 function $(id) { return document.getElementById(id); }
-function updateTopStatus(text) {
-    // 状态文本与状态点颜色联动 (绿=就绪/回合/开始，琥珀=等待/连接中)
-    document.querySelectorAll('.status-text').forEach(function(el) { el.innerText = text; });
-    const active = text.indexOf('就绪') !== -1 || text.indexOf('回合') !== -1 || text.indexOf('开始') !== -1;
-    document.querySelectorAll('.status-dot').forEach(function(el) {
-        el.style.backgroundColor = active ? '#10b981' : '#f59e0b';
-        el.style.boxShadow = active ? '0 0 8px #10b981' : '0 0 8px #f59e0b';
+
+const keys = document.querySelectorAll('.key');
+const submitKey = document.querySelector('.submit-key');
+const gameContainer = $('game-container');
+const lobbyContainer = $('lobby-container');
+const setupPrompt = $('pvp-setup-prompt');
+const dualTrack = $('dual-track');
+const myGuesses = $('my-guesses');
+const oppGuesses = $('her-guesses');
+const lobbyButtons = document.querySelectorAll('#connection-menu button');
+
+function updateTopStatus(text, active = false) {
+    document.querySelectorAll('.status-text').forEach(el => { el.textContent = text; });
+    const color = active ? '#10b981' : '#f59e0b';
+    document.querySelectorAll('.status-dot').forEach(el => {
+        el.style.backgroundColor = color;
+        el.style.boxShadow = '0 0 8px ' + color;
     });
 }
-function switchToGameUI() {
-    try {
-        console.log('[telepathy] switchToGameUI start');
-        const lobby = document.getElementById('lobby-container');
-        if (!lobby) { alert('缺节点:lobby-container'); return; }
-        const gameCont = document.getElementById('game-container');
-        if (!gameCont) { alert('缺节点:game-container'); return; }
-        const track = document.getElementById('dual-track');
-        if (!track) { alert('缺节点:dual-track'); return; }
-        const prompt = document.getElementById('pvp-setup-prompt');
-        if (!prompt) { alert('缺节点:pvp-setup-prompt'); return; }
-        lobby.style.display = 'none';
-        gameCont.style.display = 'flex';
-        track.style.display = 'none';
-        prompt.style.display = 'block';
-        // 每次进入对局界面都重置输入状态，进入设密阶段
-        currentGuess = [];
-        syncInputAlias();
-        renderInput();
-        refreshKeyStates();
-        gameState = 'SETTING_SECRET';
-        iWon = false;
-        oppWon = false;
-        const mySecretBar = document.getElementById('my-secret-bar');
-        if (mySecretBar) mySecretBar.style.display = 'none';
-        const mySecretCodeEl = document.getElementById('my-secret-code');
-        if (mySecretCodeEl) mySecretCodeEl.innerText = '----';
-        console.log('[telepathy] switchToGameUI done');
-    } catch (err) {
-        alert('UI切换失败，请检查控制台: ' + err.message);
-        console.error(err);
-    }
+
+function canSubmit() {
+    return gameState === 'SETTING_SECRET' || gameState === 'MY_TURN' || gameState === 'PVE_TURN';
 }
-function armConnGuard() {
-    if (!conn) return;
-    if (connGuardBound) return;
-    connGuardBound = true;
-    conn.on('close', function() {
-        alert('宝宝跑去玩手机咯，返回大厅。');
-        exitGame();
-    });
-    conn.on('error', function(err) {
-        console.log('[telepathy] conn error', err);
-        alert('连接异常，返回大厅。');
-        exitGame();
-    });
+
+function canEditInput() {
+    return canSubmit() || gameState === 'OPP_TURN';
 }
-function showLobby() {
-    if ($('lobby-container')) $('lobby-container').style.display = 'flex';
-    if ($('game-container')) $('game-container').style.display = 'none';
+
+function setGameState(state) {
+    gameState = state;
+    const locked = !canSubmit();
+    submitKey.classList.toggle('locked', locked);
+    submitKey.setAttribute('aria-disabled', String(locked));
 }
+
 function showGame() {
-    if ($('lobby-container')) $('lobby-container').style.display = 'none';
-    if ($('game-container')) $('game-container').style.display = 'flex';
+    lobbyContainer.style.display = 'none';
+    gameContainer.style.display = 'flex';
 }
-function closeNetworkModal() { const m = $('network-modal'); if (m) m.style.display = 'none'; }
-function openRules() { const m = $('rulesModal'); if (m) m.style.display = 'flex'; }
-function syncInputAlias() { currentInput = currentGuess; }
-function generateRoomCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-    return code;
-}
-function createRoom() {
-    document.getElementById('connection-menu').style.display = 'none';
-    document.getElementById('connection-waiting').style.display = 'block';
-    document.getElementById('my-room-code').innerText = '....';
-    updateTopStatus('连接服务器中...');
 
-    const code = generateRoomCode();
-    try { if (peer) peer.destroy(); } catch (e) {}
-    peer = new Peer('irene-pbox-' + code, peerOptions);
-
-    // 只有当信令服务器确认分配了该 ID，才显示房间码
-    peer.on('open', function(id) {
-        document.getElementById('my-room-code').innerText = code;
-        console.log('[telepathy] room ready, shortCode =', code);
-        updateTopStatus('等待对方加入');
-    });
-
-    peer.on('error', function(err) {
-        console.error('[telepathy] host peer error:', err);
-        if (gameState === 'LOBBY') {
-            showAppMessage('建房失败', '无法连接到信号服务器，请检查网络后重试。', '#ef4444');
-            quitMatch();
-        }
-    });
-
-    peer.on('connection', function(connection) {
-        conn = connection;
-        isHost = true;
-        connGuardBound = false;
-        console.log('[telepathy] host data connection established');
-        armConnGuard();
-        bindConnData();
-        conn.on('open', function() {
-            // 拆弹：连接成功后清除定时超时（房主侧保险）
-            if (connTimeout) {
-                clearTimeout(connTimeout);
-                connTimeout = null;
-            }
-            console.log('[telepathy] host data channel open');
-            switchToGameUI();
-            const sel = $('mode-select');
-            gameMode = sel ? sel.value : 'hard';
-            currentMode = (gameMode === 'easy') ? 'casual' : 'hardcore';
-            if (conn) try { conn.send({ type: 'MODE', data: gameMode }); } catch (e) { /* 网络异常，继续处理 */ }
-            enterSecretSetting();
-        });
-    });
-}
-function cleanupJoin() {
-    try { if (conn) { conn.close(); conn = null; } } catch (e) {}
-    try { if (peer) { peer.destroy(); peer = null; } } catch (e) {}
-    connGuardBound = false;
-    gameState = 'LOBBY';
+function showLobby() {
+    setGameState('LOBBY');
+    gameContainer.style.display = 'none';
+    lobbyContainer.style.display = 'flex';
+    $('connection-menu').style.display = 'block';
+    $('connection-waiting').style.display = 'none';
+    $('my-room-code').textContent = '....';
+    lobbyButtons.forEach(button => { button.disabled = false; });
     updateTopStatus('请建立连接');
+}
+
+function scheduleForSession(currentSessionId, callback, delay) {
+    const timer = setTimeout(() => {
+        sessionTimers.delete(timer);
+        if (currentSessionId === sessionId) callback();
+    }, delay);
+    sessionTimers.add(timer);
+    return timer;
+}
+
+function cancelSessionTimer(timer) {
+    clearTimeout(timer);
+    sessionTimers.delete(timer);
+}
+
+function listenForSession(emitter, event, currentSessionId, callback) {
+    const listener = (...args) => {
+        if (currentSessionId === sessionId) callback(...args);
+    };
+    emitter.on(event, listener);
+    sessionListeners.push(() => emitter.off(event, listener));
+}
+
+function clearRound() {
+    mySecret = [];
+    oppSecret = [];
+    iWon = false;
+    oppWon = false;
+    attemptsLeft = MAX_PVE_ATTEMPTS;
+    currentGuess.length = 0;
+    keyPress = null;
+    keys.forEach(key => key.classList.remove('draft-dimmed'));
+    for (const list of [myGuesses, oppGuesses]) {
+        list.replaceChildren();
+        list.scrollLeft = 0;
+        list.scrollTop = 0;
+    }
+    setupPrompt.textContent = SETUP_PROMPT;
+    setupPrompt.style.display = 'none';
+    dualTrack.style.display = 'flex';
+    $('her-track-title').textContent = '宝宝进度';
+    hideCoin();
+    $('coin-result-text').textContent = '';
+    $('coin-result-text').style.opacity = '0';
+    $('flip-coin').style.transition = 'none';
+    $('flip-coin').style.transform = 'rotateY(0deg)';
+    renderInput();
+}
+
+function closeSession(currentSessionId, message) {
+    if (currentSessionId !== sessionId || gameState === 'LOBBY') return;
+    sessionId++;
+    sessionTimers.forEach(clearTimeout);
+    sessionTimers.clear();
+    connectionTimer = null;
+    sessionListeners.splice(0).forEach(removeListener => removeListener());
+
+    const oldConn = conn;
+    const oldPeer = peer;
+    conn = null;
+    peer = null;
+    isHost = false;
+    try { oldConn?.close(); } catch (err) { console.warn('关闭数据连接失败', err); }
+    try { oldPeer?.destroy(); } catch (err) { console.warn('销毁 Peer 失败', err); }
+
+    clearRound();
+    $('rulesModal').style.display = 'none';
+    const messageModal = $('messageModal');
+    if (messageModal) messageModal.style.display = 'none';
+    showLobby();
+    if (message) showAppMessage(message.title, message.body, message.color);
+}
+
+function quitMatch() {
+    if (gameState === 'LOBBY') return;
+    const currentSessionId = sessionId;
+    if (confirm('确定要退出当前房间吗？进度将会丢失。')) closeSession(currentSessionId);
+}
+
+function failOnline(currentSessionId, err) {
+    if (currentSessionId !== sessionId) return;
+    if (err) console.warn('[telepathy] connection error', err);
+    const inGame = conn?.open || (gameState !== 'CONNECTING' && gameState !== 'WAIT_MODE');
+    closeSession(currentSessionId, inGame
+        ? { title: '连接已断开', body: '与宝宝的连接已断开，已返回联机大厅。', color: '#f59e0b' }
+        : { title: '连接失败', body: '请确认房间码、双方的网络和在线状态，再试一次。', color: '#ef4444' });
+}
+
+function armConnectionTimeout(currentSessionId) {
+    cancelSessionTimer(connectionTimer);
+    connectionTimer = scheduleForSession(currentSessionId, () => {
+        closeSession(currentSessionId, {
+            title: '连接超时', body: '未能建立联机，请检查网络后重试。', color: '#ef4444'
+        });
+    }, CONNECTION_TIMEOUT);
+}
+
+function clearConnectionTimeout() {
+    cancelSessionTimer(connectionTimer);
+    connectionTimer = null;
+}
+
+function createRoom() {
+    let code = '';
+    for (let i = 0; i < 4; i++) code += ROOM_CHARS[Math.floor(Math.random() * ROOM_CHARS.length)];
+    startOnline(true, code);
 }
 
 function joinRoom() {
-    const input = $('join-code-input');
-    const code = input ? input.value.toUpperCase().trim() : '';
+    const code = $('join-code-input').value.trim().toUpperCase();
     if (!code) return;
-    if (typeof Peer === 'undefined') { showAppMessage('无法联机', '网络库未加载，请检查网络后重试。', '#ef4444'); return; }
-    try { if (peer) peer.destroy(); } catch (e) {}
-    peer = new Peer(peerOptions);
-    peer.on('open', function() {
-        conn = peer.connect('irene-pbox-' + code, { reliable: true });
-        connGuardBound = false;
-        isHost = false;
-
-        // 在 open 之前先绑定错误与关闭处理器，捕获握手阶段断开
-        conn.on('error', function(err) {
-            console.error('[telepathy] conn error:', err);
-            showAppMessage('连接失败', '未能连接到房间 ' + code + '，请确认房间码和对方在线状态。', '#ef4444');
-            cleanupJoin();
-        });
-        conn.on('close', function() {
-            if (gameState === 'LOBBY') cleanupJoin();
-        });
-
-        // 15秒握手超时（局域网打洞容许更慢）
-        connTimeout = setTimeout(function() {
-            if (conn && conn.readyState !== 'open') {
-                console.log('[telepathy] join timeout');
-                showAppMessage('连接超时', '房间 ' + code + ' 连接超时，请稍后重试。', '#ef4444');
-                cleanupJoin();
-            }
-        }, 15000);
-
-        conn.on('open', function() {
-            // 拆弹：连接成功后清除定时超时
-            if (connTimeout) {
-                clearTimeout(connTimeout);
-                connTimeout = null;
-            }
-            console.log('[telepathy] guest data connection open');
-            armConnGuard();
-            switchToGameUI();
-            bindConnData();
-        });
-
-        updateTopStatus('正在连接房间 ' + code + ' ...');
-    });
-    peer.on('error', function(err) {
-        console.error('[telepathy] peer error:', err);
-        showAppMessage('连接失败', '未能连接到房间 ' + code + '，请确认房间码。', '#ef4444');
-    });
+    if (code.length !== 4 || [...code].some(char => !ROOM_CHARS.includes(char))) {
+        showAppMessage('房间码无效', '请输入对方分享的 4 位房间码。', '#ef4444');
+        return;
+    }
+    startOnline(false, code);
 }
-function bindConnData() {
-    if (!conn) return;
-    conn.on('data', function(payload) {
-        if (!payload || !payload.type) return;
-        if (payload.type === 'MODE') {
-            gameMode = payload.data;
-            currentMode = (gameMode === 'easy') ? 'casual' : 'hardcore';
+
+function startOnline(host, code) {
+    if (gameState !== 'LOBBY') return;
+    if (typeof Peer === 'undefined') {
+        showAppMessage('无法联机', '网络库未加载，请检查网络后重试。', '#ef4444');
+        return;
+    }
+
+    const currentSessionId = ++sessionId;
+    isHost = host;
+    gameMode = $('mode-select').value;
+    setGameState('CONNECTING');
+    lobbyButtons.forEach(button => { button.disabled = true; });
+    if (host) {
+        $('connection-menu').style.display = 'none';
+        $('connection-waiting').style.display = 'block';
+    }
+    updateTopStatus(host ? '连接服务器中...' : '正在连接房间 ' + code + ' ...');
+    armConnectionTimeout(currentSessionId);
+
+    const id = 'irene-pbox-' + code;
+    try {
+        peer = host ? new Peer(id, peerOptions) : new Peer(peerOptions);
+    } catch (err) {
+        failOnline(currentSessionId, err);
+        return;
+    }
+
+    listenForSession(peer, 'error', currentSessionId, err => {
+        // 信令服务器断线时，已建立的数据通道仍可能可用。
+        if (err?.type !== 'network' || !conn?.open) failOnline(currentSessionId, err);
+    });
+    listenForSession(peer, 'disconnected', currentSessionId, () => {
+        if (!conn?.open) failOnline(currentSessionId);
+    });
+    listenForSession(peer, 'close', currentSessionId, () => failOnline(currentSessionId));
+
+    if (host) {
+        listenForSession(peer, 'open', currentSessionId, () => {
+            clearConnectionTimeout();
+            $('my-room-code').textContent = code;
+            updateTopStatus('等待对方加入');
+        });
+        listenForSession(peer, 'connection', currentSessionId, connection => {
+            if (conn) {
+                connection.close();
+                return;
+            }
+            armConnectionTimeout(currentSessionId);
+            bindConnection(connection, currentSessionId);
+        });
+    } else {
+        listenForSession(peer, 'open', currentSessionId, () => {
+            let connection;
+            try {
+                connection = peer.connect(id, { reliable: true });
+            } catch (err) {
+                failOnline(currentSessionId, err);
+                return;
+            }
+            if (currentSessionId !== sessionId) return;
+            if (connection) bindConnection(connection, currentSessionId);
+            else failOnline(currentSessionId);
+        });
+    }
+}
+
+function bindConnection(connection, currentSessionId) {
+    conn = connection;
+    listenForSession(connection, 'close', currentSessionId, () => failOnline(currentSessionId));
+    listenForSession(connection, 'error', currentSessionId, err => failOnline(currentSessionId, err));
+    listenForSession(connection, 'data', currentSessionId, handlePeerMessage);
+
+    const open = () => {
+        if (gameState !== 'CONNECTING') return;
+        showGame();
+        dualTrack.style.display = 'none';
+        setupPrompt.style.display = 'block';
+        if (isHost) {
+            clearConnectionTimeout();
             enterSecretSetting();
-        } else if (payload.type === 'READY') {
-            oppReady = true;
-            oppSecret = payload.secret ? payload.secret.slice() : [];
-            secretCode = oppSecret.slice();
+            sendOnline({ type: 'MODE', data: gameMode });
+        } else {
+            armConnectionTimeout(currentSessionId);
+            setGameState('WAIT_MODE');
+            setupPrompt.textContent = '正在同步联机模式...';
+            updateTopStatus('等待房主同步模式');
+        }
+    };
+    listenForSession(connection, 'open', currentSessionId, open);
+    if (connection.open) open();
+}
+
+function sendOnline(payload) {
+    const currentSessionId = sessionId;
+    try {
+        if (!conn?.open) {
+            failOnline(currentSessionId);
+            return false;
+        }
+        const sent = conn.send(payload);
+        sent?.catch(err => failOnline(currentSessionId, err));
+        return currentSessionId === sessionId;
+    } catch (err) {
+        failOnline(currentSessionId, err);
+        return false;
+    }
+}
+
+function enterSecretSetting() {
+    setGameState('SETTING_SECRET');
+    setupPrompt.textContent = SETUP_PROMPT;
+    updateTopStatus('联机设密 | 请输入你的 4 位底牌');
+    renderInput();
+}
+
+function validDigits(digits) {
+    return Array.isArray(digits) && digits.length === 4
+        && [...digits].every(digit => typeof digit === 'string' && /^[0-9]$/.test(digit))
+        && (gameMode === 'easy' || new Set(digits).size === 4);
+}
+
+function handlePeerMessage(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const awaitingOpponent = gameState === 'OPP_TURN' || gameState === 'WAIT_OPP_FINISH';
+    switch (payload.type) {
+        case 'MODE':
+            if (isHost || gameState !== 'WAIT_MODE' || !['hard', 'easy'].includes(payload.data)) return;
+            gameMode = payload.data;
+            clearConnectionTimeout();
+            enterSecretSetting();
+            break;
+        case 'READY':
+            if ((gameState !== 'SETTING_SECRET' && gameState !== 'WAIT_READY') || oppSecret.length || !validDigits(payload.secret)) return;
+            oppSecret = payload.secret.slice();
             checkPvpStart();
-        } else if (payload.type === 'SECRET') {
-            oppSecret = payload.data.slice();
-            secretCode = oppSecret.slice();
-            checkGameStart();
-        } else if (payload.type === 'GUESS') {
-            oppGuesses.push(payload.data);
-            renderOppGuesses();
-        } else if (payload.type === 'WIN') {
+            break;
+        case 'COIN':
+            if (!isHost && gameState === 'COIN_TOSS' && typeof payload.data?.isHostFirst === 'boolean') {
+                startTurns(payload.data.isHostFirst);
+            }
+            break;
+        case 'GUESS':
+            if (awaitingOpponent && !oppWon && validDigits(payload.data?.guess)) {
+                const guess = payload.data.guess;
+                appendGuess(oppGuesses, guess, evaluateGuess(guess, mySecret));
+            }
+            break;
+        case 'WIN':
+            if (!awaitingOpponent || oppWon) return;
             oppWon = true;
             if (iWon) {
-                gameState = 'GAMEOVER';
-                updateTopStatus('对局圆满结束');
-                showAppMessage('双向奔赴！', '宝宝也成功破译了你的底牌！对局结束。', '#10b981');
+                finishPvp();
             } else {
-                gameState = 'MY_TURN';
-                document.querySelector('.submit-key').classList.remove('locked');
-                updateTopStatus('你的回合 (对方已破译)');
-                showAppMessage('对方已破译', '宝宝率先破译了你的底牌！\n不要气馁，你可以继续破译直到成功！', '#f59e0b');
+                setGameState('MY_TURN');
+                updateTopStatus('你的回合 (对方已破译)', true);
+                showAppMessage('对方已破译', '宝宝率先破译了你的底牌！你可以继续破译直到成功。', '#f59e0b');
             }
-        } else if (payload.type === 'COIN') {
-            playCoinToss(payload.data.isHostFirst);
-        } else if (payload.type === 'TURN_PASS') {
-            gameState = 'MY_TURN';
-            const kb = document.querySelector('.submit-key');
-            if (kb) kb.classList.remove('locked');
-            updateTopStatus('你的回合');
-            if (navigator.vibrate) navigator.vibrate(100);
-        }
-    });
+            break;
+        case 'TURN_PASS':
+            if (gameState !== 'OPP_TURN' || oppWon) return;
+            setGameState('MY_TURN');
+            updateTopStatus('你的回合', true);
+            navigator.vibrate?.(100);
+            break;
+    }
 }
-function enterSecretSetting() {
-    isPVE = false;
-    myReady = false;
-    oppReady = false;
-    mySecretCode = [];
-    mySecret = [];
-    oppSecret = [];
-    secretCode = [];
-    iWon = false;
-    oppWon = false;
-    myGuesses = [];
-    oppGuesses = [];
-    const prompt = $('pvp-setup-prompt');
-    if (prompt) prompt.innerText = '请在下方输入你的 4 位灵犀密码，然后点击确认';
-    if ($('my-guesses')) $('my-guesses').innerHTML = '';
-    if ($('her-guesses')) $('her-guesses').innerHTML = '';
-    updateTopStatus('联机设密 | 请输入你的 4 位底牌');
-}
+
 function checkPvpStart() {
-    if (gameState === 'SETTING_SECRET' && myReady && oppReady) {
-        gameState = 'COIN_TOSS';
-        const prompt = $('pvp-setup-prompt');
-        if (prompt) prompt.style.display = 'none';
-        const track = $('dual-track');
-        if (track) track.style.display = 'flex';
-        currentGuess.length = 0;
-        syncInputAlias();
-        renderInput();
-        updateTopStatus('抛硬币 | 争夺先手...');
-        if (isHost) {
-            const hostGoesFirst = Math.random() > 0.5;
-            if (conn) try { conn.send({ type: 'COIN', data: { isHostFirst: hostGoesFirst } }); } catch (e) { /* 网络异常，继续处理 */ }
-            playCoinToss(hostGoesFirst);
-        }
+    if (gameState !== 'WAIT_READY' || oppSecret.length !== 4) return;
+    setGameState('COIN_TOSS');
+    setupPrompt.style.display = 'none';
+    dualTrack.style.display = 'flex';
+    updateTopStatus('抛硬币 | 争夺先手...');
+    if (isHost) {
+        const isHostFirst = Math.random() > 0.5;
+        if (sendOnline({ type: 'COIN', data: { isHostFirst } })) startTurns(isHostFirst);
     }
 }
-function checkGameStart() {
-    if (gameState === 'WAIT_OPPONENT' && oppSecret.length === 4) {
-        gameState = 'COIN_TOSS';
-        if (isHost) {
-            const hostGoesFirst = Math.random() > 0.5;
-            if (conn) try { conn.send({ type: 'COIN', data: { isHostFirst: hostGoesFirst } }); } catch (e) { /* 网络异常，继续处理 */ }
-            playCoinToss(hostGoesFirst);
-        }
-    }
+
+function startTurns(isHostFirst) {
+    const myTurnFirst = isHost === isHostFirst;
+    setGameState(myTurnFirst ? 'MY_TURN' : 'OPP_TURN');
+    updateTopStatus(myTurnFirst ? '你的回合' : '对方回合，请等待', myTurnFirst);
+    playCoinToss(myTurnFirst, isHostFirst, sessionId);
 }
-function genSecretHardcore() {
-    const pool = ['0','1','2','3','4','5','6','7','8','9'];
-    const out = [];
-    for (let i = 0; i < 4; i++) {
-        const idx = Math.floor(Math.random() * pool.length);
-        out.push(pool[idx]);
-        pool.splice(idx, 1);
-    }
-    return out;
+
+function playCoinToss(myTurnFirst, isHostFirst, currentSessionId) {
+    const coin = $('flip-coin');
+    const result = $('coin-result-text');
+    const rotation = isHostFirst ? 1800 : 1980;
+    gameContainer.classList.add('coin-tossing');
+    $('coin-modal').style.display = 'flex';
+    result.style.opacity = '0';
+    // 先应用重置后的角度，确保新一局抽到相同先手时也有过渡。
+    coin.getBoundingClientRect();
+    coin.style.transition = 'transform 3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+    coin.style.transform = 'rotateY(' + rotation + 'deg)';
+    navigator.vibrate?.([40, 60, 40]);
+
+    scheduleForSession(currentSessionId, () => {
+        result.textContent = myTurnFirst ? '你获得了先手！' : '对方获得了先手！';
+        result.style.color = myTurnFirst ? '#10b981' : '#f59e0b';
+        result.style.opacity = '1';
+        navigator.vibrate?.(80);
+        scheduleForSession(currentSessionId, hideCoin, 2000);
+    }, 3000);
 }
-function genSecretCasual() {
-    const pool = ['0','1','2','3','4','5','6','7','8','9'];
-    const out = [];
-    for (let i = 0; i < 4; i++) out.push(pool[Math.floor(Math.random() * pool.length)]);
-    return out;
+
+function hideCoin() {
+    $('coin-modal').style.display = 'none';
+    gameContainer.classList.remove('coin-tossing');
 }
+
 function startOfflinePVE() {
-    closeNetworkModal();
-    const sel = $('mode-select');
-    const raw = sel ? sel.value : 'hard';
-    if (raw === 'easy') { gameMode = 'easy'; currentMode = 'casual'; }
-    else { gameMode = 'hard'; currentMode = 'hardcore'; }
-    isPVE = true;
-    secretCode = (currentMode === 'casual') ? genSecretCasual() : genSecretHardcore();
-    oppSecret = secretCode.slice();
-    mySecret = [];
-    attemptsLeft = MAX_PVE_ATTEMPTS;
-    pendingReset = false;
-    gameState = 'PVE_TURN';
-    const kbPve = document.querySelector('.submit-key');
-    if (kbPve) kbPve.classList.remove('locked');
-    currentGuess.length = 0;
-    syncInputAlias();
-    myGuesses = []; oppGuesses = [];
-    if ($('my-guesses')) $('my-guesses').innerHTML = '';
-    if ($('her-guesses')) $('her-guesses').innerHTML = '<div style="text-align:center; color:var(--text-note); font-size:12px; margin-top:20px;">当前为单机 PVE 练习模式</div>';
-    showGame();
-    updateTopStatus('单机演练 | 模式: ' + (currentMode === 'casual' ? '轻松' : '硬核'));
-    renderAttempts();
-    renderInput();
-    if (typeof playSound === 'function') playSound('bubble');
-}
-function resetRound() {
-    currentGuess.length = 0;
-    syncInputAlias();
-    pendingReset = false;
-    attemptsLeft = MAX_PVE_ATTEMPTS;
-    myGuesses = [];
-    if ($('my-guesses')) $('my-guesses').innerHTML = '';
-    if (isPVE) {
-        secretCode = (currentMode === 'casual') ? genSecretCasual() : genSecretHardcore();
-        oppSecret = secretCode.slice();
-        gameState = 'PVE_TURN';
-        const kbReset = document.querySelector('.submit-key');
-        if (kbReset) kbReset.classList.remove('locked');
-        updateTopStatus('单机演练 | 模式: ' + (currentMode === 'casual' ? '轻松' : '硬核') + ' | 新一局已开始');
-    } else {
-        gameState = 'LOBBY';
-        showLobby();
-        updateTopStatus('请建立连接');
-    }
-    renderAttempts();
-    renderInput();
-}
-function exitGame(force) {
-    if (!force) {
-        const ok = confirm('确定要退出当前对局吗？进度将会丢失。');
-        if (!ok) return;
-    }
-    if (conn) { try { conn.close(); } catch (e) {} conn = null; }
-    if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
-    connGuardBound = false;
-    gameState = 'LOBBY';
-    isPVE = false;
-    pendingReset = false;
-    currentGuess.length = 0;
-    syncInputAlias();
-    myGuesses = []; oppGuesses = []; mySecret = []; oppSecret = []; secretCode = [];
-    if ($('my-guesses')) $('my-guesses').innerHTML = '';
-    if ($('her-guesses')) $('her-guesses').innerHTML = '';
-    showLobby();
-    renderAttempts();
-    renderInput();
-    updateTopStatus('请建立连接');
-}
-function initGame() {
-    gameState = 'LOBBY';
-    isPVE = false;
-    pendingReset = false;
-    iWon = false;
-    oppWon = false;
-    mySecret = []; oppSecret = []; secretCode = []; myGuesses = []; oppGuesses = [];
-    currentGuess.length = 0;
-    syncInputAlias();
-    attemptsLeft = MAX_PVE_ATTEMPTS;
-    document.getElementById('her-track-title').innerText = '宝宝进度';
-    const menu = $('connection-menu');
-    const waiting = $('connection-waiting');
-    if (menu) menu.style.display = 'block';
-    if (waiting) waiting.style.display = 'none';
-    if ($('my-guesses')) $('my-guesses').innerHTML = '';
-    if ($('her-guesses')) $('her-guesses').innerHTML = '';
-    showLobby();
-    renderAttempts();
-    renderInput();
-    updateTopStatus('请建立连接');
-}
-function evaluateGuess(guessArr, secretArr) {
-    let a = 0;
-    const secretLeft = [];
-    const guessLeft = [];
+    if (gameState !== 'LOBBY') return;
+    sessionId++;
+    gameMode = $('mode-select').value;
+    clearRound();
+    const pool = Array.from('0123456789');
     for (let i = 0; i < 4; i++) {
-        if (guessArr[i] === secretArr[i]) a++;
-        else { secretLeft.push(secretArr[i]); guessLeft.push(guessArr[i]); }
+        const index = Math.floor(Math.random() * pool.length);
+        oppSecret.push(gameMode === 'easy' ? pool[index] : pool.splice(index, 1)[0]);
     }
-    let b = 0;
-    const counts = {};
-    secretLeft.forEach(function(d) { counts[d] = (counts[d] || 0) + 1; });
-    guessLeft.forEach(function(d) { if (counts[d] > 0) { b++; counts[d]--; } });
-    if (currentMode === 'casual' || gameMode === 'easy') b = 0;
-    return { a: a, b: b };
+
+    const note = document.createElement('div');
+    note.className = 'practice-note';
+    note.textContent = '当前为单机 PVE 练习模式';
+    oppGuesses.append(note);
+    showGame();
+    setGameState('PVE_TURN');
+    renderAttempts();
 }
 
 function renderAttempts() {
-    const label = $('attempts-label');
-    if (label) label.textContent = '剩余 ' + attemptsLeft + ' 次';
+    const mode = gameMode === 'easy' ? '轻松' : '硬核';
+    updateTopStatus('单机演练 | ' + mode + ' · 剩余 ' + attemptsLeft + ' 次', true);
 }
+
+function evaluateGuess(guess, secret) {
+    let a = 0;
+    let b = 0;
+    const counts = new Map();
+    for (let i = 0; i < 4; i++) {
+        if (guess[i] === secret[i]) a++;
+        else counts.set(secret[i], (counts.get(secret[i]) || 0) + 1);
+    }
+    if (gameMode === 'hard') {
+        for (let i = 0; i < 4; i++) {
+            const count = counts.get(guess[i]);
+            if (guess[i] === secret[i] || !count) continue;
+            b++;
+            counts.set(guess[i], count - 1);
+        }
+    }
+    return { a, b };
+}
+
 function renderInput() {
-    const slots = document.querySelectorAll('.digit-slot');
-    slots.forEach(function(slot, index) {
-        if (index < currentGuess.length) {
-            slot.textContent = (gameState === 'SET_SECRET') ? '*' : currentGuess[index];
-            slot.classList.add('filled');
-        } else {
-            slot.textContent = '';
-            slot.classList.remove('filled');
-        }
+    document.querySelectorAll('.digit-slot').forEach((slot, index) => {
+        slot.textContent = currentGuess[index] ?? '';
+        slot.classList.toggle('filled', index < currentGuess.length);
     });
-    refreshKeyStates();
-    // 每次清空输入或刷新 UI 时，强制清除所有按键的草稿变灰状态
-    if (currentInput.length === 0) {
-        document.querySelectorAll('.key').forEach(k => k.classList.remove('draft-dimmed'));
-    }
-    refreshConfirm();
-}
-function refreshKeyStates() {
-    const keys = document.querySelectorAll('.key[data-num]');
-    keys.forEach(function(key) {
-        const num = key.getAttribute('data-num');
-        key.classList.remove('key-disabled');
-        if (currentMode === 'hardcore' && currentGuess.indexOf(num) !== -1) key.classList.add('key-disabled');
+    document.querySelectorAll('.key[data-num]').forEach(key => {
+        key.classList.toggle('key-disabled', gameMode === 'hard' && currentGuess.includes(key.dataset.num));
     });
 }
-function refreshConfirm() {
-    // action-row 已移除(与键盘 del 键重复)，保留空实现以兼容调用点
+
+function appendGuess(list, guess, { a, b }) {
+    const row = document.createElement('div');
+    row.className = 'guess-item';
+    const digits = document.createElement('span');
+    digits.className = 'nums';
+    digits.textContent = guess.join(' ');
+    const result = document.createElement('span');
+    result.className = 'result';
+    result.innerHTML = ICON_A.repeat(a) + ICON_B.repeat(b);
+    const label = document.createElement('span');
+    label.className = 'result-label';
+    label.textContent = a + 'A' + b + 'B';
+    result.append(label);
+    row.append(digits, result);
+    list.prepend(row);
 }
-function handleDigit(num) {
-    if (gameState === 'LOBBY' || gameState === 'GAMEOVER') return;
-    if (currentGuess.length >= 4) return;
-    if (currentMode === 'hardcore' && currentGuess.indexOf(num) !== -1) return;
-    currentGuess.push(num);
-    syncInputAlias();
-    if (typeof playSound === 'function') playSound('tap');
-    renderInput();
-}
-function withdraw() {
-    if (currentGuess.length > 0) currentGuess.pop();
-    syncInputAlias();
-    renderInput();
-}
-function renderMyGuesses() {
-    const container = $('my-guesses');
-    if (!container) return;
-    container.innerHTML = '';
-    myGuesses.forEach(function(g) {
-        let svgs = '';
-        for (let i = 0; i < g.a; i++) svgs += ICON_A;
-        for (let i = 0; i < g.b; i++) svgs += ICON_B;
-        const label = g.a + 'A' + g.b + 'B';
-        container.insertAdjacentHTML('afterbegin', '<div class="guess-item"><span class="nums">' + g.guess.join(' ') + '</span><span class="result">' + svgs + '<span style="font-size:11px;color:var(--text-note);margin-left:4px;">' + label + '</span></span></div>');
-    });
-}
-function renderOppGuesses() {
-    const container = $('her-guesses');
-    if (!container) return;
-    container.innerHTML = '';
-    oppGuesses.forEach(function(g) {
-        let svgs = '';
-        for (let i = 0; i < g.a; i++) svgs += ICON_A;
-        for (let i = 0; i < g.b; i++) svgs += ICON_B;
-        const label = g.a + 'A' + g.b + 'B';
-        container.insertAdjacentHTML('afterbegin', '<div class="guess-item"><span class="nums">' + g.guess.join(' ') + '</span><span class="result">' + svgs + '<span style="font-size:11px;color:var(--text-note);margin-left:4px;">' + label + '</span></span></div>');
-    });
-}
+
 function submitGuess() {
-    if (currentInput.length !== 4 || gameState === 'LOBBY' || gameState === 'GAMEOVER' || gameState === 'WAIT_OPP_FINISH') return;
-    if (typeof playSound === 'function') playSound('bubble');
-    // SETTING_SECRET 状态下允许提交底牌（房主设密）
+    if (!canSubmit() || !validDigits(currentGuess)) return;
+    const guess = currentGuess.splice(0);
+    renderInput();
+    playSound('bubble');
+
     if (gameState === 'SETTING_SECRET') {
-        mySecretCode = currentGuess.slice();
-        mySecret = mySecretCode.slice();
-        myReady = true;
-        document.getElementById('her-track-title').innerText = '宝宝进度 (底牌: ' + mySecret.join('') + ')';
-        currentGuess.length = 0;
-        syncInputAlias();
-        renderInput();
-        const prompt = $('pvp-setup-prompt');
-        if (prompt) prompt.innerText = '等待对方就绪...';
+        mySecret = guess;
+        setGameState('WAIT_READY');
+        $('her-track-title').textContent = '宝宝进度 (我的底牌: ' + mySecret.join('') + ')';
+        setupPrompt.textContent = '等待对方就绪...';
         updateTopStatus('底牌已锁定 | 等待对方就绪...');
-        if (conn) try { conn.send({ type: 'READY', secret: mySecretCode }); } catch (e) { /* 网络异常，继续处理 */ }
-        checkPvpStart();
-        return;
-    }
-    if (gameState === 'SET_SECRET') {
-        mySecret = currentGuess.slice();
-        currentGuess.length = 0;
-        syncInputAlias();
-        renderInput();
-        gameState = 'WAIT_OPPONENT';
-        updateTopStatus('底牌已锁定 | 等待对方设密...');
-        if (conn) try { conn.send({ type: 'SECRET', data: mySecret }); } catch (e) { /* 网络异常，继续处理 */ }
-        checkGameStart();
-        return;
-    }
-    if (gameState === 'GAMEOVER' || gameState === 'LOBBY') return;
-    if (gameState !== 'PVE_TURN' && gameState !== 'MY_TURN') return;
-    const target = (oppSecret.length === 4) ? oppSecret : secretCode;
-    const res = evaluateGuess(currentGuess, target);
-    const guessData = { guess: currentGuess.slice(), a: res.a, b: res.b };
-    myGuesses.push(guessData);
-    renderMyGuesses();
-    if (conn && gameState === 'MY_TURN') try { conn.send({ type: 'GUESS', data: guessData }); } catch (e) { /* 网络异常，继续处理 */ }
-    currentGuess.length = 0;
-    syncInputAlias();
-
-    // 胜利判定 (4A)
-    if (res.a === 4) {
-        if (isPVE) { gameState = 'GAMEOVER'; } else {
-            iWon = true;
-            if (conn) try { conn.send({ type: 'WIN' }); } catch (e) { /* 网络异常，继续处理 */ }
-            if (typeof triggerConfetti === 'function') triggerConfetti();
-            
-            if (oppWon) {
-                gameState = 'GAMEOVER';
-                updateTopStatus('对局圆满结束');
-                setTimeout(() => showAppMessage('双向奔赴！', `正确底牌是 ${oppSecret.join('')}。\n双方均已成功破译！`, '#10b981'), 500);
-            } else {
-                gameState = 'MY_TURN';
-                document.querySelector('.submit-key').classList.remove('locked');
-                updateTopStatus('你的回合 (对方已破译)');
-                setTimeout(() => showAppMessage('破译成功！', `宝宝太厉害啦！正确底牌是 ${oppSecret.join('')}。\n请继续破译对方的密码...`, '#10b981'), 500);
-                renderInput();
-            }
-        }
+        if (sendOnline({ type: 'READY', secret: mySecret })) checkPvpStart();
         return;
     }
 
-    // PVE: 20 次机会倒数 (绝不锁键盘、不交接回合，可无限连猜到次数耗尽)
+    const result = evaluateGuess(guess, oppSecret);
+    appendGuess(myGuesses, guess, result);
     if (gameState === 'PVE_TURN') {
         attemptsLeft--;
-        renderAttempts();
-        if (attemptsLeft <= 0) {
-            gameState = 'GAMEOVER';
-            pendingReset = true;
-            renderInput();
-            setTimeout(function() {
-                showAppMessage('破译失败', '20 次机会已用尽，正确底牌是 ' + target.join('') + '。点击关闭开始下一局。', '#ef4444');
-                bindPveEndReset();
-            }, 500);
-            return;
-        }
-        renderInput();
+        if (result.a === 4 || attemptsLeft === 0) finishPve(result.a === 4);
+        else renderAttempts();
         return;
     }
 
-    // 回合移交 (仅联机 PVP：自己猜完 → 锁键盘 → 交棒对方)
-    if (gameState === 'MY_TURN') {
+    if (!sendOnline({ type: 'GUESS', data: { guess, ...result } })) return;
+    if (result.a === 4) {
+        iWon = true;
+        if (!sendOnline({ type: 'WIN' })) return;
         if (oppWon) {
-            // 对方已赢，无需移交回合，自己可以无限继续猜
-            updateTopStatus('你的回合 (你的心思已被宝宝猜透)');
-            renderInput();
-            // 必须先刷新 UI（清空输入框），然后再 return！
-            return; 
+            finishPvp();
+        } else {
+            setGameState('WAIT_OPP_FINISH');
+            updateTopStatus('已破译 | 等待对方破译', true);
+            const secret = oppSecret.join('');
+            scheduleForSession(sessionId, () => {
+                if (gameState === 'WAIT_OPP_FINISH') {
+                    showAppMessage('破译成功！', '正确底牌是 ' + secret + '。等待宝宝破译你的底牌。', '#10b981');
+                }
+            }, 500);
         }
-        
-        // 正常交接回合
-        gameState = 'OPP_TURN';
-        const kb = document.querySelector('.submit-key');
-        if (kb) kb.classList.add('locked');
-        renderInput();
+    } else if (!oppWon) {
+        setGameState('OPP_TURN');
         updateTopStatus('对方回合，请等待');
-        if (conn) try { conn.send({ type: 'TURN_PASS' }); } catch (e) { console.error('Turn pass error', e); }
+        sendOnline({ type: 'TURN_PASS' });
     }
 }
-function bindPveEndReset() {
-    const btn = $('msgCloseBtn');
-    if (!btn || btn.dataset.pveBound === '1') return;
-    btn.dataset.pveBound = '1';
-    btn.addEventListener('click', function handler() {
-        btn.dataset.pveBound = '';
-        btn.removeEventListener('click', handler);
-        if (pendingReset && isPVE) resetRound();
-    });
+
+function finishPvp() {
+    setGameState('GAMEOVER');
+    updateTopStatus('对局圆满结束', true);
+    const secret = oppSecret.join('');
+    scheduleForSession(sessionId, () => {
+        showAppMessage('双向奔赴！', '正确底牌是 ' + secret + '。双方均已成功破译！', '#10b981');
+    }, 500);
 }
 
-const keys = document.querySelectorAll('.key');
-let longPressTimer;
-keys.forEach(function(key) {
-    key.addEventListener('contextmenu', function(e) { e.preventDefault(); });
-    key.addEventListener('pointerdown', function(e) {
-        if (gameState === 'LOBBY' || gameState === 'GAMEOVER') return;
-        try { key.setPointerCapture(e.pointerId); } catch (err) {}
-        let isLongPress = false;
-        longPressTimer = setTimeout(function() {
-            isLongPress = true;
-            if (!key.classList.contains('action-key')) {
+function finishPve(won) {
+    setGameState('GAMEOVER');
+    updateTopStatus(won ? '单机破译成功' : '20 次机会已用尽', won);
+    const currentSessionId = sessionId;
+    const secret = oppSecret.join('');
+    scheduleForSession(currentSessionId, () => {
+        const prefix = won ? '正确底牌是 ' : '20 次机会已用尽，正确底牌是 ';
+        showAppMessage(won ? '破译成功！' : '破译失败', prefix + secret + '。点击下方按钮开始下一局。', won ? '#10b981' : '#ef4444');
+        const button = $('msgCloseBtn');
+        const restart = () => {
+            if (currentSessionId !== sessionId) return;
+            closeSession(currentSessionId);
+            startOfflinePVE();
+        };
+        button.textContent = '再来一局';
+        button.addEventListener('click', restart, { once: true });
+        sessionListeners.push(() => {
+            button.removeEventListener('click', restart);
+            button.textContent = '知道啦！';
+        });
+    }, 500);
+}
+
+keys.forEach(key => {
+    key.addEventListener('contextmenu', event => event.preventDefault());
+    key.addEventListener('pointerdown', event => {
+        if (!canEditInput() || keyPress || event.button !== 0 || (key === submitKey && !canSubmit())) return;
+        const press = { key, pointerId: event.pointerId, currentSessionId: sessionId, long: false };
+        try { key.setPointerCapture(event.pointerId); } catch {}
+        keyPress = press;
+        press.timer = scheduleForSession(press.currentSessionId, () => {
+            if (!canEditInput()) return;
+            press.long = true;
+            if (key.dataset.num !== undefined) {
                 key.classList.toggle('draft-dimmed');
-                if (navigator.vibrate) navigator.vibrate(50);
+                navigator.vibrate?.(50);
             }
         }, 400);
-        key.onpointerup = function() {
-            clearTimeout(longPressTimer);
-            key.onpointerup = null;
-            if (isLongPress) return;
-            if (key.classList.contains('submit-key')) { submitGuess(); return; }
-            if (key.classList.contains('del-key')) { withdraw(); return; }
-            if (key.classList.contains('draft-dimmed')) return;
-            if (gameState === 'LOBBY' || gameState === 'GAMEOVER' || gameState === 'WAIT_OPP_FINISH') return;
-            const num = key.getAttribute('data-num') || key.innerText.trim();
-            handleDigit(num);
-        };
     });
+    const endPress = event => {
+        if (keyPress?.key !== key || keyPress.pointerId !== event.pointerId) return;
+        const press = keyPress;
+        keyPress = null;
+        cancelSessionTimer(press.timer);
+        if (event.type !== 'pointerup' || press.currentSessionId !== sessionId || press.long || !canEditInput()) return;
+        if (key === submitKey) {
+            submitGuess();
+        } else if (key.classList.contains('del-key')) {
+            currentGuess.pop();
+            renderInput();
+        } else if (!key.classList.contains('draft-dimmed') && currentGuess.length < 4) {
+            const digit = key.dataset.num;
+            if (gameMode === 'hard' && currentGuess.includes(digit)) return;
+            currentGuess.push(digit);
+            renderInput();
+        }
+    };
+    key.addEventListener('pointerup', endPress);
+    key.addEventListener('pointercancel', endPress);
+    key.addEventListener('lostpointercapture', endPress);
 });
-window.addEventListener('DOMContentLoaded', initGame);
-window.openRules = openRules;
-window.createRoom = createRoom;
-window.joinRoom = joinRoom;
-window.startOfflinePVE = startOfflinePVE;
-window.closeNetworkModal = closeNetworkModal;
-window.submitGuess = submitGuess;
-window.exitGame = exitGame;
-window.quitMatch = quitMatch;
-window.withdraw = withdraw;
-window.handleDigit = handleDigit;
-function bindTelepathyButtons() {
-    const lobbyBack = $('lobby-back-btn');
-    if (lobbyBack) lobbyBack.addEventListener('click', function() { window.location.href = '../../index.html'; });
-    const rulesBtn = $('rules-btn');
-    if (rulesBtn) rulesBtn.addEventListener('click', openRules);
-    const rulesGame = $('rules-btn-game');
-    if (rulesGame) rulesGame.addEventListener('click', openRules);
-    const createBtn = $('create-room-btn');
-    if (createBtn) createBtn.addEventListener('click', createRoom);
-    const joinBtn = $('join-room-btn');
-    if (joinBtn) joinBtn.addEventListener('click', joinRoom);
-    const offlineBtn = $('offline-btn');
-    if (offlineBtn) offlineBtn.addEventListener('click', startOfflinePVE);
-    const exitBtn = $('exit-btn');
-    if (exitBtn) exitBtn.addEventListener('click', exitGame);
-    const quitBtns = [$('quit-btn-lobby'), $('quit-btn-game')];
-    quitBtns.forEach(function(btn) { if (btn) btn.addEventListener('click', quitMatch); });
-    const rulesCloseBtn = $('rules-close-btn');
-    if (rulesCloseBtn) rulesCloseBtn.addEventListener('click', function() { closeModal('rulesModal'); });
-    const themeBtn = $('theme-btn');
-    if (themeBtn) themeBtn.addEventListener('click', function() { if (typeof toggleTheme === 'function') toggleTheme(); });
-    const themeGame = $('theme-btn-game');
-    if (themeGame) themeGame.addEventListener('click', function() { if (typeof toggleTheme === 'function') toggleTheme(); });
+
+$('create-room-btn').addEventListener('click', createRoom);
+$('join-room-btn').addEventListener('click', joinRoom);
+$('offline-btn').addEventListener('click', startOfflinePVE);
+for (const id of ['quit-btn-lobby', 'quit-btn-game']) $(id).addEventListener('click', quitMatch);
+for (const id of ['rules-btn', 'rules-btn-game']) {
+    $(id).addEventListener('click', () => { $('rulesModal').style.display = 'flex'; });
 }
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindTelepathyButtons);
-} else {
-    bindTelepathyButtons();
+$('rules-close-btn').addEventListener('click', () => closeModal('rulesModal'));
+
+function syncGameThemeIcon() {
+    $('theme-icon-game').innerHTML = $('theme-icon').innerHTML;
 }
-
-// 3D 抛硬币：定先手 (handrix 正面 / abb 反面)
-function playCoinToss(isHostFirst) {
-    try {
-        const modal = $('coin-modal');
-        const coin = $('flip-coin');
-        const resultText = $('coin-result-text');
-        if (!modal || !coin || !resultText) return;
-        modal.style.display = 'flex';
-        resultText.style.opacity = '0';
-        // 硬币正面=hostIndex0(handrix) 背面=1(abb)；多转几圈增强仪式感
-        const targetRotation = isHostFirst ? 1800 : 1980;
-        coin.style.transition = 'transform 3s cubic-bezier(0.2, 0.8, 0.2, 1)';
-        coin.style.transform = 'rotateY(' + targetRotation + 'deg)';
-        if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
-        const myTurnFirst = isHost ? isHostFirst : !isHostFirst;
-        setTimeout(function() {
-            resultText.innerText = myTurnFirst ? '你获得了先手！' : '对方获得了先手！';
-            resultText.style.color = myTurnFirst ? '#10b981' : '#f59e0b';
-            resultText.style.opacity = '1';
-            if (navigator.vibrate) navigator.vibrate(80);
-            setTimeout(function() {
-                modal.style.display = 'none';
-                gameState = myTurnFirst ? 'MY_TURN' : 'OPP_TURN';
-                const kb = document.querySelector('.submit-key');
-                if (kb) kb.classList.toggle('locked', !myTurnFirst);
-                updateTopStatus(myTurnFirst ? '你的回合' : '对方回合，请等待');
-            }, 2000);
-        }, 3000);
-    } catch (e) {
-        console.error('[telepathy] playCoinToss error', e);
-    }
+for (const id of ['theme-btn', 'theme-btn-game']) {
+    $(id).addEventListener('click', () => { toggleTheme(); syncGameThemeIcon(); });
 }
-
-// 局部退出：断开网络并重置回联机大厅 (全局返回=顶部 header 的 href 大厅链接)
-function quitMatch() {
-    const inMatch = (gameState !== 'LOBBY' && gameState !== 'GAMEOVER');
-    if (inMatch) {
-        if (!confirm('确定要退出当前对局吗？进度将会丢失。')) return;
-    }
-    // 清理网络连接
-    if (conn) { try { conn.close(); } catch (e) {} conn = null; }
-    if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
-    isHost = false;
-
-    // 强制重置状态与数据
-    gameState = 'LOBBY';
-    isPVE = false;
-    pendingReset = false;
-    myReady = false;
-    oppReady = false;
-    mySecret = []; oppSecret = []; secretCode = [];
-    mySecretCode = [];
-    myGuesses = []; oppGuesses = [];
-    currentGuess.length = 0;
-    syncInputAlias();
-
-    // 重置 UI
-    if ($('my-guesses')) $('my-guesses').innerHTML = '';
-    if ($('her-guesses')) $('her-guesses').innerHTML = '';
-    const kb = document.querySelector('.submit-key');
-    if (kb) kb.classList.remove('locked');
-    renderAttempts();
-    renderInput();
-
-    // 回到联机大厅并复位联机面板
-    showLobby();
-    const menu = $('connection-menu');
-    if (menu) menu.style.display = 'block';
-    const waiting = $('connection-waiting');
-    if (waiting) waiting.style.display = 'none';
-    const codeDisplay = $('my-room-code-display');
-    if (codeDisplay) codeDisplay.style.display = 'none';
-    const codeSpan = $('my-room-code');
-    if (codeSpan) codeSpan.innerText = '生成中...';
-    const createBtn = $('create-room-btn');
-    if (createBtn) createBtn.disabled = false;
-    updateTopStatus('请建立连接');
-}
-
+syncGameThemeIcon();
+showLobby();

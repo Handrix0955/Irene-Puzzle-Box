@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
     <title>灵犀密码：破译你的心</title>
     <link rel="stylesheet" href="../../css/common.css">
-    <link rel="stylesheet" href="telepathy.css">
-    <script>
-    window.onerror = function(msg, url, line) { alert('致命错误\n信息: ' + msg + '\n行号: ' + line); };
-    </script>
+    <link rel="stylesheet" href="telepathy.css?v=12">
 </head>
 <body data-theme="dark" data-skin="default">
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute;">
+        <symbol id="telepathy-star" viewBox="0 0 24 24">
+            <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>
+        </symbol>
+    </svg>
     <div class="header">
         <a href="../../index.html" class="hall-back glass-panel" style="text-decoration: none;">
             <svg class="icon" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> 返回大厅
@@ -107,12 +109,6 @@
                 <div class="key action-key submit-key"><svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
             </div>
         </div>
-        <p style="margin: 0 0 5px 0; font-size: 13px; color: var(--text-note);">请将上方 4 位代码发送给宝宝</p>
-
-        <div class="my-secret-bar glass-panel" id="my-secret-bar" style="display:none; margin-top: 12px;">
-            <span class="secret-label">我的底牌：</span>
-            <span class="secret-code" id="my-secret-code">----</span>
-        </div>
     </div>
     <div class="modal-overlay" id="rulesModal">
         <div class="modal-content">
@@ -123,12 +119,12 @@
                 <h3 style="color: var(--text-main); margin: 10px 0 5px 0;">核心目标：</h3>
                 <ul style="padding-left: 20px; margin: 0 0 15px 0;">
                     <li>系统/对方会设定 <b>4位</b> 密码（硬核模式不重复）。</li>
-                    <li>单机默认 20 次机会，抢先获得 4A 获胜。</li>
+                    <li>单机有 20 次机会。联机时，先获得 4A 的玩家等待对方继续破译。</li>
                 </ul>
                 <h3 style="color: var(--text-main); margin: 10px 0 5px 0;">破译线索 (1A2B)：</h3>
                 <ul style="padding-left: 20px; margin: 0;">
-                    <li style="margin-bottom: 8px;"><svg class="icon-a" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;color:#f59e0b;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> <b>实心星 (A)</b>：数字对，且位置也对。</li>
-                    <li><svg class="icon-b" viewBox="0 0 24 24" style="width:14px;height:14px;color:#f59e0b;fill:none;stroke:currentColor;stroke-width:2;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg> <b>空心星 (B)</b>：数字对，但位置错。</li>
+                    <li style="margin-bottom: 8px;"><svg class="icon-a" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg> <b>实心星 (A)</b>：数字对，且位置也对。</li>
+                    <li><svg class="icon-b" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg> <b>空心星 (B)</b>：数字对，但位置错。</li>
                 </ul>
 
                 <!-- 实战举例高亮卡片 -->
@@ -140,25 +136,25 @@
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span>猜 <b>1 2 3 4</b></span>
                             <span style="display: flex; align-items: center; gap: 2px;">
-                                <svg class="icon-b" viewBox="0 0 24 24" style="width:12px;height:12px;color:#f59e0b;fill:none;stroke:currentColor;stroke-width:2;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                                <svg class="icon-b" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
                                 <span style="font-size:11px;color:var(--text-note);margin-left:4px;">(仅4对但错位)</span>
                             </span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span>猜 <b>4 6 8 9</b></span>
                             <span style="display: flex; align-items: center; gap: 2px;">
-                                <svg class="icon-a" viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;color:#f59e0b;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                                <svg class="icon-b" viewBox="0 0 24 24" style="width:12px;height:12px;color:#f59e0b;fill:none;stroke:currentColor;stroke-width:2;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                                <svg class="icon-a" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
+                                <svg class="icon-b" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
                                 <span style="font-size:11px;color:var(--text-note);margin-left:4px;">(4全对, 6错位)</span>
                             </span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span>猜 <b>4 5 7 6</b></span>
                             <span style="display: flex; align-items: center; gap: 2px;">
-                                <svg class="icon-a" viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;color:#f59e0b;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                                <svg class="icon-a" viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;color:#f59e0b;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                                <svg class="icon-b" viewBox="0 0 24 24" style="width:12px;height:12px;color:#f59e0b;fill:none;stroke:currentColor;stroke-width:2;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                                <svg class="icon-b" viewBox="0 0 24 24" style="width:12px;height:12px;color:#f59e0b;fill:none;stroke:currentColor;stroke-width:2;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                                <svg class="icon-a" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
+                                <svg class="icon-a" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
+                                <svg class="icon-b" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
+                                <svg class="icon-b" viewBox="0 0 24 24" aria-hidden="true"><use href="#telepathy-star"/></svg>
                                 <span style="font-size:11px;color:var(--text-note);margin-left:4px;">(4,5对, 7,6错位)</span>
                             </span>
                         </div>
@@ -168,9 +164,8 @@
             <button class="close-btn btn-primary" id="rules-close-btn" style="margin-top: 20px; width: 100%;">开始破译！</button>
         </div>
     </div>
-    <div class="modal-overlay" id="network-modal" style="display:none;"></div>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="../../js/common.js"></script>
-    <script src="telepathy.js"></script>
+    <script src="telepathy.js?v=12"></script>
 </body>
 </html>
