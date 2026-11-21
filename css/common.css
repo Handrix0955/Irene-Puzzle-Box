@@ -13,6 +13,7 @@
     
     --text-fixed: #0f172a; 
     --text-user: #2563eb; 
+    --on-accent: #fff;
     --text-note: #64748b; 
     --text-main: #1e293b; /* 白天深色文字 */
     
@@ -43,6 +44,7 @@
     
     --text-fixed: #f8fafc; 
     --text-user: #60a5fa; 
+    --on-accent: #081322;
     --text-note: #a1a1aa; 
     --text-main: #f8fafc; /* 黑夜白色文字 */
     
@@ -86,6 +88,30 @@ body[data-theme="dark"][data-skin="purple"] {
     --corner-glow: rgba(88, 28, 135, 0.4);
 }
 
+/* 松雾金 */
+body[data-skin="pine"] {
+    --bg-color: #f4f8f4;
+    --ray-color: rgba(63, 114, 94, 0.08);
+    --streak-color: rgba(75, 132, 106, 0.12);
+    --glow-color: rgba(66, 128, 104, 0.24);
+    --corner-glow: rgba(166, 127, 66, 0.10);
+    --dot-color: rgba(38, 70, 58, 0.08);
+    --text-user: #235f50;
+    --on-accent: #fff;
+    --selected: #dcece4;
+}
+body[data-theme="dark"][data-skin="pine"] {
+    --bg-color: #0b1512;
+    --ray-color: rgba(65, 132, 109, 0.14);
+    --streak-color: rgba(65, 128, 105, 0.20);
+    --glow-color: rgba(144, 205, 178, 0.24);
+    --corner-glow: rgba(133, 96, 54, 0.22);
+    --dot-color: rgba(171, 216, 193, 0.08);
+    --text-user: #a5d8bd;
+    --on-accent: #081712;
+    --selected: #19372d;
+}
+
 /* ======== 全局背景重塑 (点阵 + 射线统一架构) ======== */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -93,7 +119,10 @@ body {
     min-height: 100vh;
     min-height: 100dvh;
     display: flex; flex-direction: column; align-items: center; touch-action: manipulation; overflow-x: hidden;
-    padding: calc(15px + env(safe-area-inset-top)) 15px calc(40px + env(safe-area-inset-bottom)) 15px;
+    padding: calc(15px + env(safe-area-inset-top, 0px))
+             calc(15px + env(safe-area-inset-right, 0px))
+             calc(40px + env(safe-area-inset-bottom, 0px))
+             calc(15px + env(safe-area-inset-left, 0px));
     /* theme transition moved to desktop-only media query below (iOS repaint fix) */
     
         /* 统一的背景结构 (顶部光晕 + 点阵)；斜切光瀑/辉光/颗粒由伪元素承载，颜色随模式自动切换 */
@@ -167,6 +196,10 @@ body {
     display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px;
 }
 .skin-opt:active { transform: scale(0.95); }
+.skin-opt.pine {
+    background: linear-gradient(135deg, #dcece4, #a5d8bd 72%, #e3c28a);
+    color: #19372d;
+}
 
 .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(5px);

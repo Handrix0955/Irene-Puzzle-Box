@@ -1,7 +1,5 @@
 /* 七夕星空背景 + 暗黑面板 */
 body.theme-event {
-    --gradient-1: #160b2b; /* 宇宙深紫 */
-    --gradient-2: #0b1528; /* 星云深渊蓝 */
     --bg-color: #050814;
     --text-main: #f8fafc; /* 外围控制栏文字为白 */
 }
@@ -48,7 +46,7 @@ select#diff-select, #new-game-btn { flex: 1; max-width: 130px; text-align: cente
     display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr);
     width: 100%; max-width: 400px; aspect-ratio: 1/1; margin-bottom: 20px; flex-shrink: 0;
     background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 2px solid var(--grid-line-thick); border-radius: 8px; overflow: hidden; box-shadow: 0 8px 32px var(--shadow); z-index: 10;
+    border: 2px solid var(--grid-line-thick); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); z-index: 10;
     transition: 0.4s;
 }
 
@@ -67,7 +65,6 @@ select#diff-select, #new-game-btn { flex: 1; max-width: 130px; text-align: cente
 .cell.fixed { color: var(--text-fixed); font-weight: 800;}
 .cell.user { color: var(--text-user); }
 
-.cell.hint-han { background-color: var(--hint-han); } .cell.hint-luv { background-color: var(--hint-luv); } .cell.hint-ire { background-color: var(--hint-ire); }
 .cell.related { background-color: var(--highlight-related); } .cell.same { background-color: var(--highlight-same); }
 .cell.selected { background-color: var(--selected); box-shadow: inset 0 0 0 2px var(--text-user); z-index: 2; }
 
@@ -82,25 +79,25 @@ select#diff-select, #new-game-btn { flex: 1; max-width: 130px; text-align: cente
 .key, .action-btn {
     background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 10px; color: var(--text-main);
     font-size: 20px; font-weight: bold; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 4px 6px var(--shadow);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: var(--shadow);
     transition: 0.15s; cursor: pointer; user-select: none; gap: 4px;
 }
 .key:active, .action-btn:active { transform: scale(0.92); background: var(--highlight-related); }
 .key.undo-btn { color: #d97706; background: rgba(253, 230, 138, 0.4); font-size: 13px; flex-direction: row; }
 
-.action-btn.active-note { background: #f59e0b !important; color: #ffffff !important; border: 1px solid #d97706 !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2) !important; }
-.action-btn.active-note .icon { stroke: #ffffff; }
+.action-btn.active-note { background: #f59e0b !important; color: #211200 !important; border: 1px solid #713f12 !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2) !important; }
+[data-theme="dark"] .action-btn.active-note { border-color: #fde68a !important; }
 
 .action-row { display: flex; gap: 8px; width: 100%; max-width: 400px; margin-bottom: 10px; z-index: 10; }
 .action-row .action-btn { flex: 1; font-size: 13px; height: auto; padding: 10px 0; flex-direction: row; gap: 6px; }
 
 .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: center; font-size: 14px; }
-.stats-table th { background: var(--th-bg); padding: 10px 8px; border-bottom: 1px solid var(--glass-border); border-radius: 8px 8px 0 0;}
+.stats-table th { padding: 10px 8px; border-bottom: 1px solid var(--glass-border); border-radius: 8px 8px 0 0;}
 .stats-table td { border-bottom: 1px solid var(--glass-border); padding: 12px 8px; }
 
 /* ======== 中秋活动「玉兔捕月」专属样式 ======== */
 .theme-moon-text { color: #b45309; }
-body[data-theme="dark"] .theme-moon-text, [data-theme="dark"] .theme-moon-text { color: #fde047; }
+[data-theme="dark"] .theme-moon-text { color: #fde047; }
 /* 棋盘月光边框 */
 body.theme-moon .board { border-color: #fde047 !important; box-shadow: 0 8px 32px rgba(253, 224, 71, 0.2); }
 body[data-theme="dark"].theme-moon .board { border-color: #eab308 !important; box-shadow: 0 8px 32px rgba(234, 179, 8, 0.4); }

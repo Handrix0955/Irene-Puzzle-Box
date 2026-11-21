@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
     <title>灵犀密码：破译你的心</title>
-    <link rel="stylesheet" href="../../css/common.css">
+    <link rel="stylesheet" href="../../css/common.css?v=13">
     <link rel="stylesheet" href="telepathy.css?v=12">
+    <link rel="manifest" href="../../manifest.json">
+    <link rel="apple-touch-icon" href="../../assets/app-icon.png">
 </head>
 <body data-theme="dark" data-skin="default">
     <svg width="0" height="0" aria-hidden="true" style="position:absolute;">
@@ -42,7 +44,7 @@
                     <option value="easy">轻松破译 (只算位置正确)</option>
                 </select>
                 <div class="create-section" style="margin-bottom: 20px; text-align: center;">
-                    <button id="create-room-btn" class="action-btn btn-action" style="width:100%; padding:15px; background:var(--text-user); color:#fff; font-size:16px;">创建专属房间</button>
+                    <button id="create-room-btn" class="action-btn btn-action" style="width:100%; padding:15px; background:var(--text-user); color:var(--on-accent); font-size:16px; transition-property:transform, border-color, box-shadow;">创建专属房间</button>
                 </div>
                 <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 20px 0;">
                 <div class="join-section" style="display: flex; gap: 10px; margin-bottom: 24px;">
@@ -164,8 +166,9 @@
             <button class="close-btn btn-primary" id="rules-close-btn" style="margin-top: 20px; width: 100%;">开始破译！</button>
         </div>
     </div>
+    <script src="../../js/common.js?v=13"></script>
+    <script>registerPuzzleWorker('../../sw.js');</script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="../../js/common.js"></script>
-    <script src="telepathy.js?v=12"></script>
+    <script src="telepathy.js?v=13"></script>
 </body>
 </html>

@@ -615,11 +615,7 @@ for (const id of ['rules-btn', 'rules-btn-game']) {
 }
 $('rules-close-btn').addEventListener('click', () => closeModal('rulesModal'));
 
-function syncGameThemeIcon() {
-    $('theme-icon-game').innerHTML = $('theme-icon').innerHTML;
-}
 for (const id of ['theme-btn', 'theme-btn-game']) {
-    $(id).addEventListener('click', () => { toggleTheme(); syncGameThemeIcon(); });
+    $(id).addEventListener('click', toggleTheme);
 }
-syncGameThemeIcon();
 showLobby();

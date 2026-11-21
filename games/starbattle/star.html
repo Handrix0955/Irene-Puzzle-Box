@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none, viewport-fit=cover">
     <title>命中注定：宝宝捕捉计划</title>
-    <link rel="stylesheet" href="../../css/common.css">
+    <link rel="stylesheet" href="../../css/common.css?v=13">
     <link rel="stylesheet" href="star.css">
     <link rel="manifest" href="../../manifest.json">
     <link rel="apple-touch-icon" href="../../assets/app-icon.png">
@@ -79,6 +79,9 @@
                 <button class="skin-opt" onclick="changeSkin('purple')" style="background: linear-gradient(135deg, #e2c0ff, #c49aeb); color: #3b0764;">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 罗兰紫 (Purple)
                 </button>
+                <button type="button" class="skin-opt pine" onclick="changeSkin('pine')">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14h-.3a1 1 0 0 1-.7-1.7L9 9h-.2A1 1 0 0 1 8 7.3L12 3l4 4.3a1 1 0 0 1-.8 1.7H15l3 3.3a1 1 0 0 1-.7 1.7H17Z"/><path d="M12 22v-3"/></svg> 松雾金 (高级护眼绿)
+                </button>
             </div>
             <button class="close-btn" onclick="closeModal('skinModal')">选好了！</button>
         </div>
@@ -119,17 +122,9 @@
     <img id="preload-handrix" src="../../assets/handrix.png" style="display:none;">
     <img id="preload-irene" src="../../assets/irene.png" style="display:none;">
 
-    <script src="../../js/common.js"></script>
+    <script src="../../js/common.js?v=13"></script>
     <script src="bank.js"></script>
-    <script src="star.js"></script>
-<script>
-    if ("serviceWorker" in navigator) {
-        window.addEventListener("load", function () {
-            navigator.serviceWorker.register("../sw.js").catch(function (err) {
-                console.warn("SW register failed:", err);
-            });
-        });
-    }
-    </script>
+    <script src="star.js?v=13"></script>
+    <script>registerPuzzleWorker('../../sw.js');</script>
 </body>
 </html>

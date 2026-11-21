@@ -1,5 +1,3 @@
-function openSkinModal() { document.getElementById('skinModal').style.display = 'flex'; }
-
 // ======== 数据安全急救与无损合并逻辑 ========
 let defaultStats = {
     '35': { best: null, avg: 0, count: 0, name: '简单模式' },
@@ -10,26 +8,21 @@ let defaultStats = {
     'event_moon': { best: null, avg: 0, count: 0, name: '玉兔捕月' }
 };
 
-let localStats = storageGet('ireSudokuStats', defaultStats) || defaultStats;
-if (typeof localStats !== 'object' || localStats === null) localStats = defaultStats;
-if (!localStats['event_total']) localStats['event_total'] = defaultStats['event_total'];
-if (!localStats['event_qixi']) localStats['event_qixi'] = defaultStats['event_qixi'];
-if (!localStats['event_moon']) localStats['event_moon'] = defaultStats['event_moon'];
-
-// 无损继承端午数据
-if (localStats['event'] && localStats['event'].count > 0 && localStats['event_total'].count === 0) {
-    localStats['event_total'].count = localStats['event'].count;
-    localStats['event_total'].avg = localStats['event'].avg;
-    localStats['event_total'].best = localStats['event'].best;
+function loadSudokuStats(fallback) {
+    const saved = storageGet('ireSudokuStats', fallback);
+    const stats = normalizeGameStats(saved, defaultStats);
+    // 旧端午战绩继续计入活动总榜。
+    if (saved?.event) {
+        stats.event = normalizeStat(saved.event);
+        if (stats.event.count > 0 && stats.event_total.count === 0) Object.assign(stats.event_total, stats.event);
+    }
+    for (const stat of Object.values(stats)) {
+        if (stat.best === null && stat.count > 0) stat.best = stat.avg;
+    }
+    return stats;
 }
 
-['35', '45', '55', 'event_total', 'event_qixi', 'event_moon'].forEach(k => {
-    let s = localStats[k];
-    if (s) {
-        s.name = defaultStats[k].name;
-        if (s.best === null || s.best === 0 || s.best === Infinity) s.best = s.count > 0 ? s.avg : null;
-    }
-});
+let localStats = loadSudokuStats(defaultStats);
 storageSet('ireSudokuStats', localStats);
 
 // ======== 游戏核心逻辑 ========
@@ -144,6 +137,7 @@ function startNewGame() {
         }
     } else {
         document.body.classList.remove('theme-event');
+        document.body.classList.remove('theme-moon');
         document.getElementById('main-title').innerText = "爱意九宫格：han luv ire";
         stopEventBg(); generateSolution();
     }
@@ -390,6 +384,7 @@ function checkWin() {
 
     gameActive = false; clearInterval(timerInterval);
     let diffKey = document.getElementById('diff-select').value;
+    localStats = loadSudokuStats(localStats);
     let s = localStats[diffKey];
 
     s.count++; s.avg = ((s.avg * (s.count - 1)) + timeElapsed) / s.count;
@@ -485,6 +480,7 @@ function triggerLanterns() {
 }
 
 function openStats() {
+    localStats = loadSudokuStats(localStats);
     let html = `<tr><th>难度</th><th>最佳记录</th><th>平均耗时</th><th>通关局数</th></tr>`;
     ['35', '45', '55', 'event_total', 'event_qixi', 'event_moon'].forEach(k => {
         let s = localStats[k];

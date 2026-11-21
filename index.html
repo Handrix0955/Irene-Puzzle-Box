@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none, viewport-fit=cover">
     <title>Puzzle Box · han luv ire</title>
-    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/common.css?v=13">
     <style>
         body {
-            min-height: 100vh;
             justify-content: center;
-            padding: 32px 20px 48px;
             box-sizing: border-box;
         }
 
@@ -114,10 +112,8 @@
         }
 
         .status-live { color: #059669; }
-        .status-soon { color: #d97706; }
 
         [data-theme="dark"] .status-live { color: #34d399; }
-        [data-theme="dark"] .status-soon { color: #fbbf24; }
 
         .enter-hint {
             display: inline-flex;
@@ -138,8 +134,21 @@
         .card-sudoku .game-icon { color: #2563eb; }
         .card-star .game-icon { color: #a855f7; }
 
-        .hall-bottom { display: flex; gap: 10px; align-self: center; }
+        .hall-bottom { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
         .hall-bottom .hall-theme { margin-top: 0; }
+
+        .score-backup { box-sizing: border-box; width: calc(100% - 30px); max-width: 400px; }
+        .score-backup::backdrop { background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+        .score-backup label { display: block; margin-bottom: 6px; font-weight: bold; }
+        .score-backup textarea {
+            box-sizing: border-box; width: 100%; padding: 10px; resize: vertical;
+            border: 1px solid var(--glass-border); border-radius: 8px;
+            background: var(--btn-bg); color: var(--text-main); font: 16px monospace;
+        }
+        .score-backup p { font-size: 14px; line-height: 1.5; }
+        .score-backup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .score-backup-actions button { flex: 1; min-height: 44px; padding: 8px 10px; }
+        .score-backup :focus-visible, #score-backup-open:focus-visible { outline: 2px solid var(--text-user); outline-offset: 2px; }
     </style>
 <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="assets/app-icon.png">
@@ -207,7 +216,7 @@
                 </div>
             </div>
             <div class="game-meta">
-                <span class="status-soon">建设中</span>
+                <span class="status-live">可游玩</span>
                 <span class="enter-hint">进入 <svg class="icon" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
             </div>
         </a>
@@ -220,6 +229,10 @@
             <button type="button" class="hall-theme glass-panel" id="theme-btn" onclick="toggleTheme()">
                 <svg class="icon" id="theme-icon" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.7.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
                 <span id="theme-text">开灯</span>
+            </button>
+            <button type="button" id="score-backup-open" class="hall-theme glass-panel" aria-haspopup="dialog">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+                战绩备份
             </button>
         </div>
     </div>
@@ -236,25 +249,36 @@
                 <button class="skin-opt" onclick="changeSkin('purple')" style="background: linear-gradient(135deg, #e2c0ff, #c49aeb); color: #3b0764;">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 罗兰紫 (Purple)
                 </button>
+                <button type="button" class="skin-opt pine" onclick="changeSkin('pine')">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14h-.3a1 1 0 0 1-.7-1.7L9 9h-.2A1 1 0 0 1 8 7.3L12 3l4 4.3a1 1 0 0 1-.8 1.7H15l3 3.3a1 1 0 0 1-.7 1.7H17Z"/><path d="M12 22v-3"/></svg> 松雾金 (高级护眼绿)
+                </button>
             </div>
             <button class="close-btn" onclick="closeModal('skinModal')">选好了！</button>
         </div>
     </div>
 
+    <dialog class="modal-content score-backup" id="score-backup" aria-labelledby="score-backup-title">
+        <h2 id="score-backup-title">战绩备份 / 恢复</h2>
+        <p>请把备份码保存到应用之外。恢复会覆盖备份中包含的本机战绩和进度。</p>
+        <label for="score-backup-code">备份码</label>
+        <textarea id="score-backup-code" rows="4" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+        <div class="score-backup-actions">
+            <button type="button" id="score-backup-copy" autofocus><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg> 复制备份码</button>
+            <button type="button" id="score-backup-restore"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg> 恢复战绩</button>
+        </div>
+        <p id="score-backup-status" role="status"></p>
+        <button type="button" class="close-btn" id="score-backup-close">关闭</button>
+    </dialog>
+
     <!-- 版本号标识 -->
     <div style="text-align: center; padding: 20px 0; font-size: 12px; color: var(--text-note); font-weight: bold; letter-spacing: 1px;">
-        Irene's Puzzle Box v1.0.12
+        Irene's Puzzle Box v1.0.13
     </div>
 
-    <script src="js/common.js"></script>
-<script>
-    if ("serviceWorker" in navigator) {
-        window.addEventListener("load", function () {
-            navigator.serviceWorker.register("sw.js").catch(function (err) {
-                console.warn("SW register failed:", err);
-            });
-        });
-    }
+    <script src="js/common.js?v=13"></script>
+    <script>
+        bindScoreBackup();
+        registerPuzzleWorker('./sw.js');
     </script>
 </body>
 </html>

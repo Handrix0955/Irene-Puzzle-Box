@@ -27,11 +27,7 @@ let defaultStarStats = {
     'event_total': { best: null, avg: 0, count: 0, name: '活动模式总榜' },
     'event_moon': { best: null, avg: 0, count: 0, name: '玉兔爽局' }
 };
-let starStats = storageGet('ireStarStats', defaultStarStats) || defaultStarStats;
-if (typeof starStats !== 'object' || starStats === null) starStats = defaultStarStats;
-// 旧存档兼容: 补挂活动档与总榜 (不碰已有普通档数据)
-if (!starStats['event_moon']) starStats['event_moon'] = { best: null, avg: 0, count: 0, name: '玉兔爽局' };
-if (!starStats['event_total']) starStats['event_total'] = { best: null, avg: 0, count: 0, name: '活动模式总榜' };
+let starStats = normalizeGameStats(storageGet('ireStarStats', defaultStarStats), defaultStarStats);
 
 function formatTime(sec) {
     if (sec === null || sec === Infinity) return '--:--';
@@ -44,6 +40,7 @@ function formatTime(sec) {
 function statsKey() { return isMoonEvent ? 'event_moon' : String(size); }
 
 function saveStarStats() {
+    starStats = normalizeGameStats(storageGet('ireStarStats', starStats), defaultStarStats);
     let s = starStats[statsKey()];
     if (!s) return;
     s.count++;
@@ -60,6 +57,8 @@ function saveStarStats() {
 }
 
 function openStats() {
+    starStats = normalizeGameStats(storageGet('ireStarStats', starStats), defaultStarStats);
+    starProgress = normalizeStarProgress(storageGet('ireStarProgress', starProgress));
     let html = `<tr><th>难度</th><th>最佳记录</th><th>平均耗时</th><th>通关局数</th><th>题库进度</th></tr>`;
     ['7', '8', '9', 'event_total', 'event_moon'].forEach(k => {
         let s = starStats[k];
@@ -90,20 +89,14 @@ function openStats() {
 }
 
 // ======== 防重复抽题 (已玩集合; 注入新题后玩家自动无缝继续) ========
-let defaultStarProgress = { ver: 2, played: { '7': [], '8': [], '9': [], 'event_moon': [] }, cycles: { '7': 0, '8': 0, '9': 0, 'event_moon': 0 } };
-let starProgress = storageGet('ireStarProgress', defaultStarProgress) || defaultStarProgress;
-// ver 2: 进度语义修正为"通关才计入" (旧版本开局即计入, 已污染数据自动重置一次)
-if (typeof starProgress !== 'object' || !starProgress.played || starProgress.ver !== 2) starProgress = JSON.parse(JSON.stringify(defaultStarProgress));
-['7', '8', '9', 'event_moon'].forEach(k => {
-    if (!Array.isArray(starProgress.played[k])) starProgress.played[k] = [];
-    if (typeof starProgress.cycles[k] !== 'number') starProgress.cycles[k] = 0;
-});
+let starProgress = normalizeStarProgress(storageGet('ireStarProgress', null));
 
 function puzzleHash(pz) { return pz.regions.join('|'); }
 
 let currentPuzzleHash = ''; // 当前局题目的布局 hash (通关时才计入已玩集合)
 
 function drawPuzzle(sizeKey, bankArr) {
+    starProgress = normalizeStarProgress(storageGet('ireStarProgress', starProgress));
     const playedSet = new Set(starProgress.played[sizeKey]);
     let unplayed = [];
     bankArr.forEach((pz, idx) => { if (!playedSet.has(puzzleHash(pz))) unplayed.push(idx); });
@@ -376,6 +369,7 @@ function checkWinCondition() {
         saveStarStats(); // 通关战绩落盘 (仅记录胜利)
         // 通关才计入题库进度 (活动档记入 event_moon 键, 与普通档隔离)
         const progKey = statsKey();
+        starProgress = normalizeStarProgress(storageGet('ireStarProgress', starProgress));
         if (currentPuzzleHash && !starProgress.played[progKey].includes(currentPuzzleHash)) {
             starProgress.played[progKey].push(currentPuzzleHash);
             storageSet('ireStarProgress', starProgress);
