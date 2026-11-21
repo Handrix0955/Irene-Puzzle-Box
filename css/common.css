@@ -90,22 +90,22 @@ body[data-theme="dark"][data-skin="purple"] {
 
 /* 松雾金 */
 body[data-skin="pine"] {
-    --bg-color: #f4f8f4;
-    --ray-color: rgba(63, 114, 94, 0.08);
-    --streak-color: rgba(75, 132, 106, 0.12);
-    --glow-color: rgba(66, 128, 104, 0.24);
+    --bg-color: #e8f3ed;
+    --ray-color: rgba(48, 133, 97, 0.22);
+    --streak-color: rgba(49, 148, 105, 0.26);
+    --glow-color: rgba(58, 148, 111, 0.34);
     --corner-glow: rgba(166, 127, 66, 0.10);
-    --dot-color: rgba(38, 70, 58, 0.08);
+    --dot-color: rgba(26, 93, 65, 0.14);
     --text-user: #235f50;
     --on-accent: #fff;
     --selected: #dcece4;
 }
 body[data-theme="dark"][data-skin="pine"] {
     --bg-color: #0b1512;
-    --ray-color: rgba(65, 132, 109, 0.14);
-    --streak-color: rgba(65, 128, 105, 0.20);
-    --glow-color: rgba(144, 205, 178, 0.24);
-    --corner-glow: rgba(133, 96, 54, 0.22);
+    --ray-color: rgba(65, 132, 109, 0.18);
+    --streak-color: rgba(65, 128, 105, 0.25);
+    --glow-color: rgba(144, 205, 178, 0.30);
+    --corner-glow: rgba(133, 96, 54, 0.28);
     --dot-color: rgba(171, 216, 193, 0.08);
     --text-user: #a5d8bd;
     --on-accent: #081712;

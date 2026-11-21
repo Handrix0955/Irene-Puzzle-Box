@@ -4,19 +4,19 @@
 // 版本同步铁律：CACHE 整数为 N 时，index.html 大厅底部显示版本必须同步为 v1.0.N
 // 每次改动任何被缓存的文件（css/js/html），都要同时升这里的大厅显示版本
 const CACHE_PREFIX = 'ire-pbox-';
-const CACHE = 'ire-pbox-v13';
+const CACHE = 'ire-pbox-v14';
 const FILES = [
   './',
   'index.html',
   'manifest.json',
-  'css/common.css?v=13',
+  'css/common.css?v=14',
   'js/common.js?v=13',
   'games/telepathy/telepathy.html',
   'games/telepathy/telepathy.css?v=12',
   'games/telepathy/telepathy.js?v=13',
   'games/starbattle/star.html',
-  'games/starbattle/star.css',
-  'games/starbattle/star.js?v=13',
+  'games/starbattle/star.css?v=14',
+  'games/starbattle/star.js?v=14',
   'games/starbattle/bank.js',
   'games/sudoku/sudoku.html',
   'games/sudoku/sudoku.css?v=13',

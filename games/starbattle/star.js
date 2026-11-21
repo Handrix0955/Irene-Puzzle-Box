@@ -176,7 +176,9 @@ function buildBoard() {
     boardEl.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
     boardEl.style.gridTemplateRows = `repeat(${size}, minmax(0, 1fr))`;
     boardEl.style.gridAutoRows = 'minmax(0, 1fr)';
-    boardEl.innerHTML = ''; 
+    boardEl.innerHTML = '';
+    boardGesture = null;
+    lastTap = null;
 
     for (let r = 0; r < size; r++) {
         for (let c = 0; c < size; c++) {
@@ -234,42 +236,58 @@ function updateTimerUI() {
 // ======== 手势交互引擎 (极速响应) ========
 
 const boardEl = document.getElementById('star-board');
-let lastTapTime = 0;
-let lastTapCell = null;
-let isDragging = false;
-let startX = 0, startY = 0;
-let hasMoved = false;
-let dragErase = false; // 本次滑动是"擦除"模式 (起点是已画叉的格子)
+let lastTap = null;
+let boardGesture = null;
+
+function preventBoardDefault(event) {
+    if (event.cancelable) event.preventDefault();
+}
+
+// iOS 可从触摸序列触发原生双击行为，棋盘内的操作由 Pointer Events 处理。
+boardEl.addEventListener('touchstart', preventBoardDefault, { passive: false });
+boardEl.addEventListener('touchend', preventBoardDefault, { passive: false });
+boardEl.addEventListener('dblclick', preventBoardDefault);
+boardEl.addEventListener('contextmenu', preventBoardDefault);
 
 boardEl.addEventListener('pointerdown', (e) => {
-    if (isGameOver) return;
-    isDragging = true;
-    hasMoved = false;
-    startX = e.clientX;
-    startY = e.clientY;
-    // 滑动模式在按下瞬间定调: 起点若已是叉, 整段滑动为擦除; 否则为画叉
-    const originCell = e.target && e.target.closest ? e.target.closest('.cell') : null;
-    dragErase = !!(originCell && originCell.classList.contains('marked'));
-    e.target.setPointerCapture(e.pointerId);
+    if (isGameOver || boardGesture || !e.isPrimary || e.button !== 0) return;
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    preventBoardDefault(e);
+    boardGesture = {
+        pointerId: e.pointerId,
+        cell,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false,
+        erase: cell.classList.contains('marked')
+    };
+    boardEl.setPointerCapture(e.pointerId);
 });
+
+function cellAtPointer(event) {
+    const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest('.cell');
+    return cell && boardEl.contains(cell) ? cell : null;
+}
 
 boardEl.addEventListener('pointermove', (e) => {
-    if (!isDragging || isGameOver) return;
-    if (!hasMoved && Math.hypot(e.clientX - startX, e.clientY - startY) > 10) {
-        hasMoved = true;
-        lastTapTime = 0; // 一旦拖动, 清除双击计时, 避免"点-拖-点"被误判为双击
-    }
-    if (hasMoved) {
-        let el = document.elementFromPoint(e.clientX, e.clientY);
-        let cell = el ? el.closest('.cell') : null;
-        if (cell && !cell.dataset.locked) {
-            if (dragErase) cell.classList.remove('marked');
-            else cell.classList.add('marked');
-        }
-    }
+    const gesture = boardGesture;
+    if (gesture?.pointerId !== e.pointerId || isGameOver) return;
+    if (!gesture.moved && Math.hypot(e.clientX - gesture.startX, e.clientY - gesture.startY) <= 10) return;
+    gesture.moved = true;
+    lastTap = null;
+    const cell = cellAtPointer(e);
+    if (cell && !cell.dataset.locked) cell.classList.toggle('marked', !gesture.erase);
 });
 
-boardEl.addEventListener('pointercancel', () => { isDragging = false; });
+function cancelBoardGesture(event) {
+    if (boardGesture?.pointerId !== event.pointerId) return;
+    boardGesture = null;
+    lastTap = null;
+}
+
+boardEl.addEventListener('pointercancel', cancelBoardGesture);
+boardEl.addEventListener('lostpointercapture', cancelBoardGesture);
 
 // 移动端保险: 个别 iOS/Safari 版本解析"flex 子项 + aspect-ratio"时会算错高度,
 // 导致棋盘非正方形(行高 != 列宽) -> 格子被拉长或露出底板黑缝。
@@ -283,20 +301,22 @@ window.addEventListener('resize', lockBoardSquare);
 window.addEventListener('orientationchange', () => setTimeout(lockBoardSquare, 250));
 
 boardEl.addEventListener('pointerup', (e) => {
-    isDragging = false;
-    let cell = e.target.closest('.cell');
-    if (!cell || isGameOver) return;
-
-    if (!hasMoved) {
-        let now = Date.now();
-        if (now - lastTapTime < 250 && lastTapCell === cell) {
-            lastTapTime = 0; 
-            handleDoubleTap(cell);
-        } else {
-            lastTapTime = now;
-            lastTapCell = cell;
-            if (!cell.dataset.locked) cell.classList.toggle('marked');
-        }
+    const gesture = boardGesture;
+    if (gesture?.pointerId !== e.pointerId) return;
+    preventBoardDefault(e);
+    boardGesture = null;
+    const cell = cellAtPointer(e);
+    if (isGameOver || gesture.moved || cell !== gesture.cell
+        || Math.hypot(e.clientX - gesture.startX, e.clientY - gesture.startY) > 10) {
+        lastTap = null;
+        return;
+    }
+    if (lastTap?.cell === cell && e.timeStamp - lastTap.time < 250) {
+        lastTap = null;
+        handleDoubleTap(cell);
+    } else {
+        lastTap = { cell, time: e.timeStamp };
+        if (!cell.dataset.locked) cell.classList.toggle('marked');
     }
 });
 
@@ -317,6 +337,8 @@ function handleDoubleTap(cell) {
         // 判定正确！
         const img = document.createElement('img');
         img.src = `../../assets/${currentTarget}.png`;
+        img.alt = currentTarget === 'irene' ? 'Irene' : 'Handrix';
+        img.draggable = false;
         img.className = 'cell-avatar';
         cell.appendChild(img);
 

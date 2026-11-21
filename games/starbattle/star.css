@@ -1,4 +1,6 @@
 /* ======== 排版框架 (继承自数独的完美布局) ======== */
+.star-page { box-sizing: border-box; }
+
 .top-controls {
     display: flex; justify-content: space-between; align-items: center; gap: 8px;
     width: 100%; max-width: 400px; margin-bottom: 15px; z-index: 10;
@@ -40,6 +42,30 @@ select#diff-select, #new-game-btn { flex: 1; max-width: 130px; text-align: cente
     align-items: stretch;
 }
 
+@media (max-width: 480px) and (orientation: portrait) {
+    .star-page {
+        /* 为页头、计时栏、两排操作和上下留白预留空间。 */
+        --board-reserved-height: calc(252px + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
+        padding-block: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    .star-page .header, .top-controls { margin-bottom: 8px; }
+    .star-page .hall-back { margin-bottom: 6px; padding-block: 6px; }
+    .action-row { margin-bottom: 6px; }
+    .action-row + .action-row { margin-bottom: 0; }
+    .board {
+        margin-bottom: 10px;
+        max-width: clamp(220px, calc(100vh - var(--board-reserved-height)), 400px);
+        /* 小视口单位在 Safari 工具栏收放时保持棋盘尺寸稳定。 */
+        max-width: clamp(220px, calc(100svh - var(--board-reserved-height)), 400px);
+    }
+}
+
+.board, .cell, .cell-avatar {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
 /* 修复：暗黑模式下棋盘底板完全黑化，消除白光割裂感 */
 [data-theme="dark"] .board {
     background: #0f172a; 
@@ -53,7 +79,6 @@ select#diff-select, #new-game-btn { flex: 1; max-width: 130px; text-align: cente
     box-sizing: border-box;
     display: flex; justify-content: center; align-items: center;
     transition: background-color 0.2s;
-    user-select: none; -webkit-user-select: none;
     /* 移动端修复: 禁止删除 aspect-ratio 后又加回!
        格子必须"铺满行高", 绝不能自带比例——
        一旦格子按自身宽度算高度, 它与行高的任何亚像素差都会
@@ -86,6 +111,9 @@ select#diff-select, #new-game-btn { flex: 1; max-width: 130px; text-align: cente
 .cell.error-lock { background-color: rgba(239, 68, 68, 0.25) !important; animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
 .cell-avatar {
+    /* 头像出现时不参与网格尺寸计算。 */
+    position: absolute; inset: 0; margin: auto;
+    -webkit-user-drag: none;
     width: 82%; height: 82%; border-radius: 20%; object-fit: cover;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 2; pointer-events: none;
